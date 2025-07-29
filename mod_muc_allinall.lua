@@ -5,7 +5,12 @@
 -- are queried and the users are joined to everything public returned.
 --
 
+-- TODO:
+-- - [ ] Detect mod_allinall_host automagically (Conversations and Gajim can do it)
+
 local modulemanager = require"core.modulemanager";
+local usermanager = require"core.usermanager";
+
 local jid_join = require"util.jid".join;
 local jid_split = require "util.jid".split;
 
@@ -59,6 +64,11 @@ local function inject_bookmark(jid, room, autojoin, name)
 	module:log("debug", "Injecting bookmark for %s into %s", room, jid);
 	local pep_service = mod_pep.get_pep_service(jid_split(jid))
 
+	if not name then
+		local bare, _, _ = jid_split(room)
+		name = bare
+	end
+
 	local current, err = get_current_bookmarks(jid, pep_service);
 	if err then
 		module:log("error", "Could not retrieve existing bookmarks for %s: %s", jid, err);
@@ -93,41 +103,40 @@ end
 
 local function handle_muc_added(event)
 	-- Add MUC to all members' bookmarks
-	module:log("info", "Adding new group chat to all member bookmarks...");
-	local muc_jid, muc_name = event.muc.jid, event.muc.name;
-	module:log("debug", "muc_jid=%s, muc_name=%s", muc_jid, muc_name);
-	for username in usermanager:users(module.host) do
-		local user_jid = member_username .. "@" .. module.host;
-		inject_bookmark(user_jid, muc_jid, true, muc_name);
+	local room = event.room;
+	module:log("info", "Adding new group chat %s to all member bookmarks...", room.jid);
+	--module:log("debug", "muc_jid=%s, muc_name=%s, module.host=%s", room.jid, room.name, module.host);
+	-- btw it's not safe to call usermanager.users during setup() 
+	for username in usermanager.users(host) do
+		--module:log("debug", "handle-muc-added: username=%s", username);
+		local user_jid = username .. "@" .. module.host;
+		--module:log("debug", "user_jid=%s, room.jid=%s, true, room.name=%s", user_jid, room.jid, room.name);
+		inject_bookmark(user_jid, room.jid, true, room.name);
 	end
 end
 
 local function handle_muc_removed(event)
 	-- Remove MUC from all members' bookmarks
-	local muc_jid = event.muc.jid;
-	for member_username in ipairs(mod_groups.get_members(event.group_id)) do
-		local member_jid = member_username .. "@" .. module.host;
-		remove_bookmark(member_jid, muc_jid);
+	local room = event.room;
+	module:log("info", "Removing group chat %s from all member bookmarks...", room.jid);
+	--module:log("debug", "muc_jid=%s, muc_name=%s, module.host=%s", room.jid, room.name, module.host);
+	-- btw it's not safe to call usermanager.users during setup() 
+	for username in usermanager.users(host) do
+		--module:log("debug", "handle-muc-removed: username=%s", username);
+		local user_jid = username .. "@" .. module.host;
+		--module:log("debug", "user_jid=%s, room.jid=%s", user_jid, room.jid);
+		remove_bookmark(user_jid, room.jid);
 	end
 end
 
--- figure this out later
-module:hook("muc-room-created", handle_muc_added)
---module:hook("muc-room-destroyed", handle_muc_removed)
---
-module:hook("muc-room-destroyed",function(event)
-        local room = event.room;
-	module:log("error", "room destroyed", room);
-end);
-
-
--- when a user connects, sync their bookmarks
 module:hook("resource-bind", function(event)
+	-- When a user connects, sync their bookmarks
+	--if true then	return; end; -- DEBUG: for testing the inline handlers above in isolation
 	local session = event.session;
 	local user = session.username;
 	local user_jid = jid_join(user, host);
 
-	--module:log("info", "Loading existing bookmarks for %s", user_jid);
+	module:log("info", "Loading existing bookmarks for %s", user_jid);
 	local pep_service = mod_pep.get_pep_service(jid_split(user_jid))
 	local current, err = get_current_bookmarks(user_jid, pep_service);
 	if err then
@@ -135,34 +144,35 @@ module:hook("resource-bind", function(event)
 		return;
 	end
 
+	module:log("info", "Syncing all rooms on %s to %s's bookmarks", muc_allinall_host, user_jid);
+
 	-- TODO: figure out how to do a set difference
 	-- because the removes should be current - complement(all_rooms())
 	-- and the adds should be all_rooms() - current
 	-- For now, this works, but it's doing unnecessary work (and risks mangling bookmarks needlessly)
 	
-	module:log("info", "-------------------");
+	--module:log("info", "-------------------");
 	for muc_jid, bookmark in pairs(current) do
 		if type(muc_jid) ~= "number" then -- ignore redundant numeric keys.
 			local _, _muc_host, _ = jid_split(muc_jid);
 			--module:log("info", "Testing if should clear %s from %s's bookmarks", muc_jid, user_jid);
 			if _muc_host == muc_allinall_host then
-				local room = muc_host.get_room_from_jid(muc_jid)
+			local room = muc_host.get_room_from_jid(muc_jid)
 				if not room or not room:get_hidden() then
- 	 				module:log("info", "Clearing %s from %s's bookmarks", muc_jid, user_jid);
+ 	 				--module:log("info", "Clearing %s from %s's bookmarks", muc_jid, user_jid);
 					remove_bookmark(user_jid, muc_jid)
 				end
 			end
 		end
 	end
 
-	module:log("info", "-------------------");
-	module:log("info", "Syncing all rooms on %s to %s", muc_allinall_host, user_jid);
+	--module:log("info", "-------------------");
 	for room in muc_host.all_rooms() do
 		local muc_jid, room_name = room.jid, room:get_name();
 		--module:log("info", "Testing if should add %s to %s's bookmarks", muc_jid, user_jid);
 		--add a bookmark if *not* a tombstone ("destroyed") and it's either public or the user is a member
 		if not room._data.destroyed and (room:get_public() or room:get_affiliation(user_jid)) then
-			--module:log("info", "Adding %s to %s's bookmarks", muc_jid, user_jid);
+			--module:log("info", "Adding %s, %s, true, %s", user_jid, muc_jid, room_name);
 			inject_bookmark(user_jid, muc_jid, true, room_name);
 		end
 	end
@@ -170,31 +180,23 @@ module:hook("resource-bind", function(event)
 end);
 
 
-
---module:log("info", "fragile"); -- DEBUG: make sure the module is loading
 local function setup()
 	if not muc_allinall_host then
 		module:log("info", "MUC management disabled (muc_allinall_host set to nil)");
 		return;
 	end
 
-	module:log("info", "looking up muc on %s", muc_allinall_host)
 	local target_module = modulemanager.get_module(muc_allinall_host, "muc");
 	if not target_module then
 		module:log("error", "host %s is not a MUC host -- group management will not work correctly; check your muc_allinall_host setting!", muc_allinall_host);
 	else
-		module:log("debug", "found MUC host at %s", muc_allinall_host);
 		muc_host = target_module;
+
+		-- TODO: can these be global
+		module:context(muc_allinall_host):hook("muc-room-created", handle_muc_added)
+		module:context(muc_allinall_host):hook("muc-room-destroyed", handle_muc_removed)
 	end
 end
-
-module:hook_global("user-deleted", function(event)
-	if event.host ~= module.host then return end
-	local username = event.username;
-	for group_id in user_groups(username) do
-		remove_member(group_id, username);
-	end
-end);
 
 if prosody.start_time then  -- server already started
 	setup();
