@@ -53,10 +53,11 @@ These modules are loaded/configured in Snikket here:
 * https://github.com/snikket-im/snikket-server/blob/e925a895bf88d7228ae5b491744941609d2c443c/ansible/files/prosody.cfg.lua#L204
 
 Unfortunately Circles are underdocumented and **too** flexible! They work great _as part of Snikket_, but if you have a customized Prosody
-it's walking uphill two ways. For example `mod_groups_migration` gets confused if combined with `mod_auth_ldap`, and I haven't figured out
-what I would need to configure the web admin UI which you need to manage them.
+it's walking uphill two ways. I haven't figured out how to get the web UI which you need to manage them working or if it even works right
+when not packaged inside Snikket, and `mod_groups_migration` gets confused if combined with `mod_auth_ldap` and I assume the rest of the groups
+modules haven't been tested against LDAP, which is an immediate no for any mid-sized organization.
 
-They're also hard to configure. There's no client-side interface to them. So "Circles" replaces an admin logging in and editing a plaintext
+Even if I could use them Circles are hard to configure. There's no client-side interface to them. So Circles replaces an admin logging in and editing a plaintext
 config file with names in it (bad) with an admin logging in and clicking a web UI with names in it (not much better?). I haven't tried
 `mod_adhoc_groups`, maybe that fills in the gap, but adding ad hoc commands to the mix is..complicated. I'm convinced it will be great when it
 finally works, but this is all too hard to onboard a skeptical community that isn't really in it for the love of the (FOSS) game at the moment.
