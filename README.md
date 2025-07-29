@@ -52,7 +52,12 @@ These modules are loaded/configured in Snikket here:
 * https://github.com/snikket-im/snikket-server/blob/e925a895bf88d7228ae5b491744941609d2c443c/ansible/files/prosody.cfg.lua#L134-L137
 * https://github.com/snikket-im/snikket-server/blob/e925a895bf88d7228ae5b491744941609d2c443c/ansible/files/prosody.cfg.lua#L204
 
-Unfortunately they're currently underdocumented and **too** flexible! They work great _as part of Snikket_, but if you have a customized Prosody
-they don't work. For example `mod_groups_migration` gets confused if combined with `mod_auth_ldap`. They're also too hard to configure. There's no prosodyctl interface to them yet, only the web interface, and that's pretty heavy. So it's replaced an admin ssh'ing in and editing a file with an admin logging in to a web interface or using a REST API. In either case, users can't self-manage and an admin has to be involved to onboard ever new user. Maybe `mod_adhoc_groups` works well, I don't know, I haven't tried that, but I know if that's involved there's AT LEAST the step of trying to explain wtf an ad hoc xmpp command is to new users.
+Unfortunately Circles are underdocumented and **too** flexible! They work great _as part of Snikket_, but if you have a customized Prosody
+it's walking uphill two ways. For example `mod_groups_migration` gets confused if combined with `mod_auth_ldap`, and I haven't figured out
+what I would need to configure the web admin UI which you need to manage them.
 
-This module takes the approach that `mod_roster_allinall` takes: for a small server where everyone more or less knows each other, just put everyone in every chat.  Except for private ("hidden") chats, this module leaves those alone. This is the behaviour people expect from Discord -- though not the behaviour they expect from Slack -- and it hopefully should cut through the red tape of onboarding an existing community to xmpp.
+They're also hard to configure. There's no client-side interface to them. So "Circles" replaces an admin logging in and editing a plaintext
+config file with names in it (bad) with an admin logging in and clicking a web UI with names in it (not much better?). That's too hard to onboard
+a skeptical community that isn't really in it for the love of the (FOSS) game.
+
+So, this module takes the simpler approach of `mod_roster_allinall`: just put everyone in every chat room, except for private ("hidden") chats groups. This is the behaviour people expect from Discord -- though not the behaviour they expect from Slack -- and it hopefully should cut through the red tape of onboarding an existing community to xmpp. For a small server where everyone more or less knows each other this should be plenty. Just don't make too many rooms.
